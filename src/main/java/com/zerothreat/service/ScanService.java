@@ -1,0 +1,233 @@
+package com.zerothreat.service;
+
+import com.zerothreat.dto.*;
+import com.zerothreat.entity.*;
+import com.zerothreat.repository.ScanRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class ScanService {
+
+    @Autowired
+    private ScanRepository scanRepository;
+
+    @Transactional
+    public Scan createScanFromRequest(ScanRequestDTO request) {
+        Scan scan = new Scan();
+        scan.setTarget(request.getTarget());
+
+        // Parse timestamp
+        try {
+            scan.setTimestamp(LocalDateTime.parse(request.getTimestamp(), DateTimeFormatter.ISO_DATE_TIME));
+        } catch (Exception e) {
+            scan.setTimestamp(LocalDateTime.now());
+        }
+
+        scan.setStatus(Scan.ScanStatus.COMPLETED);
+
+        // ---------------------------
+        // NMAP RESULTS
+        // ---------------------------
+        if (request.getNmap() != null) {
+            Set<NmapResult> nmapResults = request.getNmap().stream()
+                    .map(dto -> {
+                        NmapResult result = new NmapResult();
+                        result.setPort(dto.getPort());
+                        result.setProtocol(dto.getProtocol());
+                        result.setService(dto.getService());
+                        result.setVersion(dto.getVersion());
+                        result.setState(dto.getState());
+                        result.setScan(scan);
+                        return result;
+                    })
+                    .collect(Collectors.toSet());
+            scan.setNmapResults(nmapResults);
+        }
+
+        // ---------------------------
+        // SQLMAP RESULTS
+        // ---------------------------
+        if (request.getSqlmap() != null) {
+            Set<SqlMapResult> sqlMapResults = request.getSqlmap().stream()
+                    .map(dto -> {
+                        SqlMapResult result = new SqlMapResult();
+                        result.setVulnerabilityType(dto.getVulnerability_type());
+                        result.setPayload(dto.getPayload());
+                        result.setParameter(dto.getParameter());
+                        result.setDescription(dto.getDescription());
+                        result.setScan(scan);
+                        return result;
+                    })
+                    .collect(Collectors.toSet());
+            scan.setSqlMapResults(sqlMapResults);
+        }
+
+        // ---------------------------
+        // NIKTO RESULTS
+        // ---------------------------
+        if (request.getNikto() != null) {
+            Set<NiktoResult> niktoResults = request.getNikto().stream()
+                    .map(dto -> {
+                        NiktoResult result = new NiktoResult();
+                        result.setOsvdbId(dto.getOsvdb_id());
+                        result.setMethod(dto.getMethod());
+                        result.setUri(dto.getUri());
+                        result.setDescription(dto.getDescription());
+                        result.setScan(scan);
+                        return result;
+                    })
+                    .collect(Collectors.toSet());
+            scan.setNiktoResults(niktoResults);
+        }
+
+        return scanRepository.save(scan);
+    }
+
+    public Page<ScanResponseDTO> getAllScans(int page, int size) {
+        List<Scan> allScans = scanRepository.findAllOrderByCreatedAtDesc();
+
+        // Initialize collections (avoid lazy errors)
+        allScans.forEach(scan -> {
+            if (scan.getNmapResults() != null) scan.getNmapResults().size();
+            if (scan.getSqlMapResults() != null) scan.getSqlMapResults().size();
+            if (scan.getNiktoResults() != null) scan.getNiktoResults().size();
+        });
+
+        int start = Math.min(page * size, allScans.size());
+        int end = Math.min(start + size, allScans.size());
+
+        List<Scan> pageScans = allScans.subList(start, end);
+        List<ScanResponseDTO> dtos = pageScans.stream()
+                .map(this::convertToResponseDTO)
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(dtos, PageRequest.of(page, size), allScans.size());
+    }
+
+    public ScanResponseDTO getScanById(Long id) {
+        Scan scan = scanRepository.findByIdWithResults(id);
+        if (scan == null) {
+            throw new RuntimeException("Scan not found with id: " + id);
+        }
+        return convertToResponseDTOWithResults(scan);
+    }
+
+    private ScanResponseDTO convertToResponseDTO(Scan scan) {
+        ScanResponseDTO dto = new ScanResponseDTO();
+        dto.setId(scan.getId());
+        dto.setTarget(scan.getTarget());
+        dto.setTimestamp(scan.getTimestamp());
+        dto.setStatus(scan.getStatus().name());
+        dto.setCreatedAt(scan.getCreatedAt());
+
+        // Summary only
+        ScanResponseDTO.ScanSummaryDTO summary = new ScanResponseDTO.ScanSummaryDTO();
+        summary.setTotalOpenPorts(scan.getNmapResults() != null ? scan.getNmapResults().size() : 0);
+        summary.setSqlVulnerabilities(scan.getSqlMapResults() != null ? scan.getSqlMapResults().size() : 0);
+        summary.setWebVulnerabilities(scan.getNiktoResults() != null ? scan.getNiktoResults().size() : 0);
+        dto.setSummary(summary);
+
+        return dto;
+    }
+
+    private ScanResponseDTO convertToResponseDTOWithResults(Scan scan) {
+        ScanResponseDTO dto = convertToResponseDTO(scan);
+
+        dto.setNmapResults(scan.getNmapResults().stream()
+                .map(r -> new ScanResponseDTO.NmapResultDTO(
+                        r.getId(), r.getPort(), r.getProtocol(), r.getService(), r.getVersion(), r.getState()))
+                .collect(Collectors.toList()));
+
+        dto.setSqlMapResults(scan.getSqlMapResults().stream()
+                .map(r -> new ScanResponseDTO.SqlMapResultDTO(
+                        r.getId(), r.getVulnerabilityType(), r.getPayload(), r.getParameter(), r.getDescription()))
+                .collect(Collectors.toList()));
+
+        dto.setNiktoResults(scan.getNiktoResults().stream()
+                .map(r -> new ScanResponseDTO.NiktoResultDTO(
+                        r.getId(), r.getOsvdbId(), r.getMethod(), r.getUri(), r.getDescription()))
+                .collect(Collectors.toList()));
+
+        return dto;
+    }
+
+    public void launchScan(String target, Long userId) {
+        new Thread(() -> {
+            try {
+                System.out.println("Launching scan for target: " + target);
+
+                String userDir = System.getProperty("user.dir");
+                System.out.println("Current working directory: " + userDir);
+
+                java.io.File projectRoot = new java.io.File(userDir).getParentFile();
+                java.io.File scannerDir = new java.io.File(projectRoot, "scanner");
+                java.io.File scannerScript = new java.io.File(scannerDir, "scanner.py");
+
+                System.out.println("Looking for scanner at: " + scannerScript.getAbsolutePath());
+
+                if (!scannerScript.exists()) {
+                    System.err.println("Scanner script not found!");
+                    scannerScript = new java.io.File("../scanner/scanner.py");
+                    if (!scannerScript.exists()) {
+                        System.err.println("Scanner script not found at fallback path: " +
+                                scannerScript.getAbsolutePath());
+                        return;
+                    }
+                }
+
+                String pythonCmd = "python3";
+                try {
+                    new ProcessBuilder("python3", "--version").start().waitFor();
+                } catch (Exception e) {
+                    pythonCmd = "python";
+                }
+
+                System.out.println("Using python command: " + pythonCmd);
+
+                ProcessBuilder pb = new ProcessBuilder(
+                        pythonCmd,
+                        scannerScript.getAbsolutePath(),
+                        target
+                );
+
+                pb.directory(scannerScript.getParentFile());
+                System.out.println("Setting working directory to: " + scannerScript.getParentFile().getAbsolutePath());
+
+                java.util.Map<String, String> env = pb.environment();
+                String pythonPath = "/Users/nazim/Library/Python/3.9/lib/python/site-packages";
+                String existingPath = env.get("PYTHONPATH");
+                if (existingPath != null) env.put("PYTHONPATH", pythonPath + ":" + existingPath);
+                else env.put("PYTHONPATH", pythonPath);
+
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println("[Scanner] " + line);
+                    }
+                }
+
+                int exitCode = process.waitFor();
+                System.out.println("Scanner finished with exit code: " + exitCode);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+}
