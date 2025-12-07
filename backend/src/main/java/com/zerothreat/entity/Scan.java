@@ -3,7 +3,9 @@ package com.zerothreat.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -12,6 +14,8 @@ import java.util.Set;
 @Entity
 @Table(name = "scans")
 @Data
+@EqualsAndHashCode(exclude = {"nmapResults", "sqlMapResults", "niktoResults", "user"})
+@ToString(exclude = {"nmapResults", "sqlMapResults", "niktoResults", "user"})
 @NoArgsConstructor
 @AllArgsConstructor
 public class Scan {

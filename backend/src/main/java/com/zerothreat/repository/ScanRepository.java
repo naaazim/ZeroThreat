@@ -19,6 +19,6 @@ public interface ScanRepository extends JpaRepository<Scan, Long> {
 
     List<Scan> findByUserIdOrderByCreatedAtDesc(Long userId);
 
-    @Query("SELECT s FROM Scan s LEFT JOIN FETCH s.nmapResults LEFT JOIN FETCH s.sqlMapResults LEFT JOIN FETCH s.niktoResults WHERE s.id = :id")
-    Scan findByIdWithResults(Long id);
+    @Query("SELECT DISTINCT s FROM Scan s LEFT JOIN FETCH s.nmapResults LEFT JOIN FETCH s.sqlMapResults LEFT JOIN FETCH s.niktoResults WHERE s.id = :id")
+    java.util.Optional<Scan> findByIdWithResults(Long id);
 }

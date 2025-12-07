@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
@@ -10,12 +10,8 @@ import Dashboard from './pages/Dashboard';
 import ScanDetails from './pages/ScanDetails';
 
 function App() {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-    useEffect(() => {
-        const token = localStorage.getItem('token');
-        setIsAuthenticated(!!token);
-    }, []);
+    // Initialise l'état d'authentification dès le premier rendu pour éviter les redirections inutiles
+    const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('token'));
 
     const PrivateRoute = ({ children }) => {
         return isAuthenticated ? children : <Navigate to="/login" />;

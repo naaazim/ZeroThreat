@@ -3,11 +3,15 @@ package com.zerothreat.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Entity
 @Table(name = "nikto_results")
 @Data
+@EqualsAndHashCode(exclude = "scan")
+@ToString(exclude = "scan")
 @NoArgsConstructor
 @AllArgsConstructor
 public class NiktoResult {

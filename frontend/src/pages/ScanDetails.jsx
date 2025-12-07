@@ -37,6 +37,7 @@ import {
     Legend,
 } from 'chart.js';
 import { scanAPI } from '../services/api';
+import CustomLoader from '../components/CustomLoader';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -49,6 +50,11 @@ function ScanDetails() {
     const theme = useTheme();
 
     const fetchScanDetails = useCallback(async () => {
+        if (!id) {
+            setError('Identifiant de scan manquant');
+            setLoading(false);
+            return;
+        }
         try {
             const response = await scanAPI.getById(id);
             setScan(response.data);
@@ -65,11 +71,7 @@ function ScanDetails() {
     }, [fetchScanDetails]);
 
     if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-                <CircularProgress />
-            </Box>
-        );
+        return <CustomLoader message="Chargement des détails du scan..." />;
     }
 
     if (error || !scan) {
@@ -118,157 +120,232 @@ function ScanDetails() {
         plugins: {
             legend: {
                 labels: {
-                    color: theme.palette.text.primary,
+                    color: theme.palette.text.secondary,
                 },
             },
         },
         scales: {
             y: {
                 ticks: { color: theme.palette.text.secondary },
-                grid: { color: alpha(theme.palette.text.secondary, 0.1) },
+                grid: { color: alpha(theme.palette.text.secondary, 0.12) },
             },
             x: {
                 ticks: { color: theme.palette.text.secondary },
-                grid: { color: alpha(theme.palette.text.secondary, 0.1) },
+                grid: { color: alpha(theme.palette.text.secondary, 0.12) },
             },
         },
     };
 
     return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-            {/* Navbar */}
             <AppBar position="sticky" elevation={0}>
                 <Container maxWidth="xl">
-                    <Toolbar>
-                        <Button startIcon={<ArrowBack />} onClick={() => navigate('/dashboard')} sx={{ mr: 2, color: 'text.primary' }}>
+                    <Toolbar sx={{ py: 1.5 }}>
+                        <Button
+                            startIcon={<ArrowBack />}
+                            onClick={() => navigate('/dashboard')}
+                            sx={{
+                                mr: 2,
+                                color: 'text.primary',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                    color: 'primary.main',
+                                    transform: 'translateX(-4px)',
+                                },
+                            }}
+                        >
                             Retour
                         </Button>
-                        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                            <img src="/logo.png" alt="ZeroThreat" style={{ height: 40, marginRight: 12 }} />
-                            <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                                ZeroThreat
-                            </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 1.5 }}>
+                            <Box
+                                sx={{
+                                    position: 'relative',
+                                    '&:hover img': {
+                                        transform: 'scale(1.05) rotate(5deg)',
+                                    },
+                                }}
+                            >
+                                <img
+                                    src="/logo.png"
+                                    alt="ZeroThreat"
+                                    style={{
+                                        height: 38,
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        filter: 'drop-shadow(0 0 8px rgba(124, 244, 194, 0.3))',
+                                    }}
+                                />
+                            </Box>
+                            <Box>
+                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                    ZeroThreat
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Détail du scan
+                                </Typography>
+                            </Box>
                         </Box>
                     </Toolbar>
                 </Container>
             </AppBar>
 
-            {/* Content */}
-            <Container maxWidth="xl" sx={{ py: 4 }}>
-                {/* Header */}
-                <Card sx={{ mb: 4 }}>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box>
-                                <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-                                    Scan #{scan.id}
-                                </Typography>
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <Typography
-                                        sx={{
-                                            fontFamily: 'monospace',
-                                            color: 'primary.main',
-                                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                            px: 2,
-                                            py: 0.5,
-                                            borderRadius: 1,
-                                        }}
-                                    >
-                                        {scan.target}
+            <Box
+                sx={{
+                    background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(
+                        theme.palette.secondary.main,
+                        0.08
+                    )})`,
+                    borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+                }}
+            >
+                <Container maxWidth="xl" sx={{ py: 4 }}>
+                    <Card
+                        sx={{
+                            background: `linear-gradient(150deg, ${alpha(theme.palette.background.paper, 0.96)}, ${alpha(
+                                theme.palette.background.paper,
+                                0.9
+                            )})`,
+                        }}
+                    >
+                        <CardContent>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+                                <Box>
+                                    <Typography variant="overline" color="text.secondary">
+                                        Scan #{scan.id}
                                     </Typography>
-                                    <Typography color="text.secondary">
-                                        {new Date(scan.timestamp).toLocaleString('fr-FR')}
+                                    <Typography variant="h3" gutterBottom sx={{ fontWeight: 700 }}>
+                                        Cible {scan.target}
                                     </Typography>
-                                </Box>
-                            </Box>
-                            <Chip
-                                label={scan.status}
-                                color={scan.status === 'COMPLETED' ? 'success' : 'info'}
-                                sx={{ fontWeight: 600 }}
-                            />
-                        </Box>
-                    </CardContent>
-                </Card>
-
-                {/* Summary Cards */}
-                <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid item xs={12} md={4}>
-                        <Card>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <Box
-                                        sx={{
-                                            p: 1.5,
-                                            borderRadius: 2,
-                                            bgcolor: alpha(theme.palette.success.main, 0.1),
-                                            color: theme.palette.success.main,
-                                            mr: 2,
-                                        }}
-                                    >
-                                        <Security />
+                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <Typography
+                                            sx={{
+                                                fontFamily: 'monospace',
+                                                color: 'primary.main',
+                                                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                                                px: 2,
+                                                py: 0.5,
+                                                borderRadius: 1,
+                                            }}
+                                        >
+                                            {scan.target}
+                                        </Typography>
+                                        <Typography color="text.secondary">
+                                            {new Date(scan.timestamp).toLocaleString('fr-FR')}
+                                        </Typography>
                                     </Box>
+                                </Box>
+                                <Chip
+                                    label={scan.status}
+                                    color={scan.status === 'COMPLETED' ? 'success' : 'info'}
+                                    sx={{ fontWeight: 700, px: 1.5 }}
+                                />
+                            </Box>
+                        </CardContent>
+                    </Card>
+                </Container>
+            </Box>
+
+            <Container maxWidth="xl" sx={{ py: 4 }}>
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                    <Grid item xs={12} md={4} className="animate-scale-in stagger-1">
+                        <Card
+                            className="hover-lift"
+                            sx={{
+                                p: 3,
+                                background: `linear-gradient(155deg, ${alpha(theme.palette.success.main, 0.14)}, ${alpha(
+                                    theme.palette.background.paper,
+                                    0.92
+                                )})`,
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
                                     <Typography variant="h3" sx={{ fontWeight: 700 }}>
                                         {scan.nmapResults?.length || 0}
                                     </Typography>
+                                    <Typography color="text.secondary">Ports ouverts</Typography>
                                 </Box>
-                                <Typography color="text.secondary">Ports ouverts</Typography>
-                            </CardContent>
+                                <Box
+                                    sx={{
+                                        p: 1.5,
+                                        borderRadius: 2,
+                                        bgcolor: alpha(theme.palette.success.main, 0.2),
+                                        color: theme.palette.success.main,
+                                    }}
+                                >
+                                    <Security />
+                                </Box>
+                            </Box>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4}>
-                        <Card>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <Box
-                                        sx={{
-                                            p: 1.5,
-                                            borderRadius: 2,
-                                            bgcolor: alpha(theme.palette.error.main, 0.1),
-                                            color: theme.palette.error.main,
-                                            mr: 2,
-                                        }}
-                                    >
-                                        <BugReport />
-                                    </Box>
+                    <Grid item xs={12} md={4} className="animate-scale-in stagger-2">
+                        <Card
+                            className="hover-lift"
+                            sx={{
+                                p: 3,
+                                background: `linear-gradient(155deg, ${alpha(theme.palette.error.main, 0.14)}, ${alpha(
+                                    theme.palette.background.paper,
+                                    0.92
+                                )})`,
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
                                     <Typography variant="h3" sx={{ fontWeight: 700 }}>
                                         {scan.sqlMapResults?.length || 0}
                                     </Typography>
+                                    <Typography color="text.secondary">Vulnérabilités SQL</Typography>
                                 </Box>
-                                <Typography color="text.secondary">Vulnérabilités SQL</Typography>
-                            </CardContent>
+                                <Box
+                                    sx={{
+                                        p: 1.5,
+                                        borderRadius: 2,
+                                        bgcolor: alpha(theme.palette.error.main, 0.2),
+                                        color: theme.palette.error.main,
+                                    }}
+                                >
+                                    <BugReport />
+                                </Box>
+                            </Box>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4}>
-                        <Card>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <Box
-                                        sx={{
-                                            p: 1.5,
-                                            borderRadius: 2,
-                                            bgcolor: alpha(theme.palette.warning.main, 0.1),
-                                            color: theme.palette.warning.main,
-                                            mr: 2,
-                                        }}
-                                    >
-                                        <Language />
-                                    </Box>
+                    <Grid item xs={12} md={4} className="animate-scale-in stagger-3">
+                        <Card
+                            className="hover-lift"
+                            sx={{
+                                p: 3,
+                                background: `linear-gradient(155deg, ${alpha(theme.palette.warning.main, 0.16)}, ${alpha(
+                                    theme.palette.background.paper,
+                                    0.92
+                                )})`,
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
                                     <Typography variant="h3" sx={{ fontWeight: 700 }}>
                                         {scan.niktoResults?.length || 0}
                                     </Typography>
+                                    <Typography color="text.secondary">Vulnérabilités Web</Typography>
                                 </Box>
-                                <Typography color="text.secondary">Vulnérabilités Web</Typography>
-                            </CardContent>
+                                <Box
+                                    sx={{
+                                        p: 1.5,
+                                        borderRadius: 2,
+                                        bgcolor: alpha(theme.palette.warning.main, 0.22),
+                                        color: theme.palette.warning.main,
+                                    }}
+                                >
+                                    <Language />
+                                </Box>
+                            </Box>
                         </Card>
                     </Grid>
                 </Grid>
 
-                {/* Charts */}
                 <Grid container spacing={3} sx={{ mb: 4 }}>
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
                                     Distribution des ports
                                 </Typography>
                                 <Box sx={{ height: 300 }}>
@@ -286,7 +363,7 @@ function ScanDetails() {
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
                                     Vulnérabilités détectées
                                 </Typography>
                                 <Box sx={{ height: 300 }}>
@@ -297,13 +374,11 @@ function ScanDetails() {
                     </Grid>
                 </Grid>
 
-                {/* Results Tables */}
                 <Grid container spacing={3}>
-                    {/* Nmap Results */}
                     <Grid item xs={12}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
                                     Résultats Nmap
                                 </Typography>
                                 <Divider sx={{ mb: 2 }} />
@@ -341,11 +416,10 @@ function ScanDetails() {
                         </Card>
                     </Grid>
 
-                    {/* SQLMap Results */}
                     <Grid item xs={12}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
                                     Résultats SQLMap
                                 </Typography>
                                 <Divider sx={{ mb: 2 }} />
@@ -383,11 +457,10 @@ function ScanDetails() {
                         </Card>
                     </Grid>
 
-                    {/* Nikto Results */}
                     <Grid item xs={12}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
                                     Résultats Nikto
                                 </Typography>
                                 <Divider sx={{ mb: 2 }} />

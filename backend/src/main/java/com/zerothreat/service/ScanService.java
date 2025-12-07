@@ -10,6 +10,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.InetAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -116,11 +122,9 @@ public class ScanService {
     }
 
     public ScanResponseDTO getScanById(Long id) {
-        Scan scan = scanRepository.findByIdWithResults(id);
-        if (scan == null) {
-            throw new RuntimeException("Scan not found with id: " + id);
-        }
-        return convertToResponseDTOWithResults(scan);
+        return scanRepository.findByIdWithResults(id)
+                .map(this::convertToResponseDTOWithResults)
+                .orElseThrow(() -> new RuntimeException("Scan not found with id: " + id));
     }
 
     private ScanResponseDTO convertToResponseDTO(Scan scan) {
@@ -165,26 +169,27 @@ public class ScanService {
     public void launchScan(String target, Long userId) {
         new Thread(() -> {
             try {
-                System.out.println("Launching scan for target: " + target);
-
-                String userDir = System.getProperty("user.dir");
-                System.out.println("Current working directory: " + userDir);
-
-                java.io.File projectRoot = new java.io.File(userDir).getParentFile();
-                java.io.File scannerDir = new java.io.File(projectRoot, "scanner");
-                java.io.File scannerScript = new java.io.File(scannerDir, "scanner.py");
-
-                System.out.println("Looking for scanner at: " + scannerScript.getAbsolutePath());
-
-                if (!scannerScript.exists()) {
-                    System.err.println("Scanner script not found!");
-                    scannerScript = new java.io.File("../scanner/scanner.py");
-                    if (!scannerScript.exists()) {
-                        System.err.println("Scanner script not found at fallback path: " +
-                                scannerScript.getAbsolutePath());
-                        return;
-                    }
+                String normalizedTarget = normalizeTarget(target);
+                if (normalizedTarget == null || normalizedTarget.isBlank()) {
+                    System.err.println("Invalid target provided, aborting scan.");
+                    return;
                 }
+                String targetUrl = buildTargetUrl(target);
+                String nmapTarget = resolveToIp(normalizedTarget);
+                if (nmapTarget == null) {
+                    nmapTarget = normalizedTarget;
+                }
+
+                System.out.println("Launching scan for target: " + target);
+                System.out.println("Normalized target for scanner: " + normalizedTarget);
+                System.out.println("Nmap target: " + nmapTarget);
+
+                java.io.File scannerScript = resolveScannerScript();
+                if (scannerScript == null) {
+                    System.err.println("Scanner script not found in expected locations. Aborting launch.");
+                    return;
+                }
+                System.out.println("Using scanner script at: " + scannerScript.getAbsolutePath());
 
                 String pythonCmd = "python3";
                 try {
@@ -198,8 +203,13 @@ public class ScanService {
                 ProcessBuilder pb = new ProcessBuilder(
                         pythonCmd,
                         scannerScript.getAbsolutePath(),
-                        target
+                        nmapTarget
                 );
+
+                if (targetUrl != null && !targetUrl.isBlank()) {
+                    pb.command().add("--url");
+                    pb.command().add(targetUrl);
+                }
 
                 pb.directory(scannerScript.getParentFile());
                 System.out.println("Setting working directory to: " + scannerScript.getParentFile().getAbsolutePath());
@@ -229,5 +239,84 @@ public class ScanService {
                 e.printStackTrace();
             }
         }).start();
+    }
+
+    private String normalizeTarget(String target) {
+        if (target == null) return null;
+
+        String trimmed = target.trim();
+        if (trimmed.isEmpty()) return null;
+
+        try {
+            URI uri = trimmed.contains("://") ? new URI(trimmed) : new URI("http://" + trimmed);
+            if (uri.getHost() != null) {
+                return uri.getHost();
+            }
+            return trimmed;
+        } catch (URISyntaxException e) {
+            return trimmed;
+        }
+    }
+
+    private String buildTargetUrl(String target) {
+        if (target == null) return null;
+
+        String trimmed = target.trim();
+        if (trimmed.isEmpty()) return null;
+
+        if (!trimmed.contains("://")) {
+            return "http://" + trimmed;
+        }
+
+        try {
+            URI uri = new URI(trimmed);
+            String scheme = uri.getScheme() == null ? "http" : uri.getScheme();
+            String authority = uri.getAuthority();
+            if (authority != null) {
+                return scheme + "://" + authority + (uri.getPath() == null ? "" : uri.getPath());
+            }
+            return trimmed;
+        } catch (URISyntaxException e) {
+            return trimmed.startsWith("http") ? trimmed : "http://" + trimmed;
+        }
+    }
+
+    private String resolveToIp(String host) {
+        try {
+            InetAddress address = InetAddress.getByName(host);
+            return address.getHostAddress();
+        } catch (Exception e) {
+            System.err.println("Unable to resolve host to IP: " + host + " (" + e.getMessage() + ")");
+            return null;
+        }
+    }
+
+    private java.io.File resolveScannerScript() {
+        Path userDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
+        System.out.println("Current working directory: " + userDir);
+
+        Path repoRoot = userDir.getFileName().toString().equalsIgnoreCase("backend") && userDir.getParent() != null
+                ? userDir.getParent()
+                : userDir;
+
+        Path[] candidates = new Path[]{
+                repoRoot.resolve("scanner/scanner.py"),
+                userDir.resolve("scanner/scanner.py"),
+                repoRoot.getParent() != null ? repoRoot.getParent().resolve("scanner/scanner.py") : null
+        };
+
+        for (Path candidate : candidates) {
+            if (candidate != null && Files.exists(candidate)) {
+                return candidate.toFile();
+            }
+        }
+
+        System.err.println("Scanner script not found. Checked:");
+        for (Path candidate : candidates) {
+            if (candidate != null) {
+                System.err.println(" - " + candidate.toAbsolutePath());
+            }
+        }
+        return null;
     }
 }

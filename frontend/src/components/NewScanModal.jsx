@@ -10,14 +10,17 @@ import {
     Box,
     Typography,
     IconButton,
+    alpha,
+    useTheme,
 } from '@mui/material';
 import { Close, RocketLaunch } from '@mui/icons-material';
 import { scanAPI } from '../services/api';
 
-function NewScanModal({ open, onClose, onScanStarted }) {
+function NewScanModal({ open, onClose, onScanStarted, onScanLaunched }) {
     const [target, setTarget] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const theme = useTheme();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -26,6 +29,9 @@ function NewScanModal({ open, onClose, onScanStarted }) {
 
         try {
             await scanAPI.launchScan(target);
+            if (onScanLaunched) {
+                onScanLaunched();
+            }
             onScanStarted();
             onClose();
             setTarget('');
@@ -43,7 +49,15 @@ function NewScanModal({ open, onClose, onScanStarted }) {
     };
 
     return (
-        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+        <Dialog
+            open={open}
+            onClose={handleClose}
+            maxWidth="sm"
+            fullWidth
+            TransitionProps={{
+                timeout: 400,
+            }}
+        >
             <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <RocketLaunch color="primary" />
@@ -59,7 +73,7 @@ function NewScanModal({ open, onClose, onScanStarted }) {
             <Box component="form" onSubmit={handleSubmit}>
                 <DialogContent>
                     <Typography color="text.secondary" sx={{ mb: 3 }}>
-                        Entrez l'adresse IP ou l'URL cible pour lancer un scan de vulnérabilités
+                        Entrez l'adresse IP ou l'URL cible. Nous la normalisons automatiquement pour Nmap, SQLMap et Nikto.
                     </Typography>
 
                     {error && (
@@ -76,6 +90,11 @@ function NewScanModal({ open, onClose, onScanStarted }) {
                         onChange={(e) => setTarget(e.target.value)}
                         required
                         autoFocus
+                        sx={{
+                            '& .MuiInputBase-root': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.04),
+                            },
+                        }}
                     />
                 </DialogContent>
 

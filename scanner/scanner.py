@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 import logging
 from pathlib import Path
 import sys
+from urllib.parse import urlparse, urlunparse
 
 # Configuration
 from config import Config
@@ -34,22 +35,54 @@ class VulnerabilityScanner:
     
     def __init__(self, target_ip: str, target_url: Optional[str] = None):
         """
-        Initialize scanner with target information
+        Initialize scanner with target information. Accepts IPs, hostnames or full URLs.
         
         Args:
-            target_ip: IP address to scan
-            target_url: URL for web vulnerability scanning (optional)
+            target_ip: Target host/IP or URL to scan
+            target_url: Optional URL override for web vulnerability scanning
         """
-        self.target_ip = target_ip
-        self.target_url = target_url or f"http://{target_ip}"
+        self.target_ip, normalized_url = self._normalize_targets(target_ip, target_url)
+        self.target_url = normalized_url
         self.timestamp = datetime.now().isoformat()
         self.results = {
-            "target": target_ip,
+            "target": normalized_url,
             "timestamp": self.timestamp,
             "nmap": [],
             "sqlmap": [],
             "nikto": []
         }
+
+    @staticmethod
+    def _normalize_targets(raw_target: str, web_target: Optional[str]) -> tuple[str, str]:
+        """
+        Normalize the raw target so Nmap gets a clean host/IP and web scanners get a full URL.
+        """
+        if not raw_target or not raw_target.strip():
+            raise ValueError("Target IP/URL is required")
+
+        cleaned_target = raw_target.strip()
+
+        # Normalize Nmap target: strip scheme if provided so hostnames/ips are valid.
+        parsed_target = urlparse(cleaned_target if "://" in cleaned_target else f"//{cleaned_target}", allow_fragments=False)
+        nmap_target = parsed_target.hostname or cleaned_target
+
+        # Normalize web target: prefer explicit override, otherwise reuse the main target.
+        web_target_value = web_target.strip() if web_target else cleaned_target
+        parsed_web = urlparse(web_target_value if "://" in web_target_value else f"http://{web_target_value}")
+
+        netloc = parsed_web.netloc or parsed_web.path
+        path = parsed_web.path if parsed_web.netloc else ""
+        normalized_url = urlunparse((
+            parsed_web.scheme or "http",
+            netloc,
+            path,
+            parsed_web.params,
+            parsed_web.query,
+            parsed_web.fragment
+        ))
+
+        logger.info(f"Normalized targets -> Nmap: {nmap_target}, Web: {normalized_url}")
+        return nmap_target, normalized_url
     
     def run_nmap_scan(self) -> List[Dict]:
         """
@@ -65,6 +98,7 @@ class VulnerabilityScanner:
             cmd = [
                 "nmap",
                 "-sV",  # Service version detection
+                "-Pn",  # Skip host discovery (treat host as up), useful when ping is blocked
                 "-T4",  # Timing template (faster)
                 "--top-ports", "100",  # Scan top 100 ports
                 "-oX", "-",  # XML output to stdout
@@ -362,15 +396,15 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='ZeroThreat Vulnerability Scanner')
-    parser.add_argument('target_ip', help='Target IP address to scan')
-    parser.add_argument('--url', help='Target URL for web scanning', default=None)
+    parser.add_argument('target', help='Target IP/hostname or URL to scan')
+    parser.add_argument('--url', help='Optional URL for web scanning (defaults to target)', default=None)
     parser.add_argument('--no-api', action='store_true', help='Skip sending results to API')
     parser.add_argument('--save-local', action='store_true', help='Save results locally')
     
     args = parser.parse_args()
     
     # Create scanner instance
-    scanner = VulnerabilityScanner(args.target_ip, args.url)
+    scanner = VulnerabilityScanner(args.target, args.url)
     
     # Run scans
     results = scanner.aggregate_results()
