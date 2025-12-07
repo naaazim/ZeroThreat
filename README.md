@@ -470,7 +470,7 @@ Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
 ## 👥 Auteurs
 
-- **ZeroThreat Team** - Plateforme de cybersécurité professionnelle
+- **Abderahmane Nazim HAMIA** - Plateforme de cybersécurité professionnelle
 
 ## 🙏 Remerciements
 
