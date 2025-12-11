@@ -9,6 +9,8 @@ Module Python de scan automatisé de vulnérabilités pour la plateforme ZeroThr
 - **Scan Nikto** : Détection des vulnérabilités web
 - **Agrégation JSON** : Résultats normalisés et structurés
 - **Intégration API** : Envoi automatique des résultats au backend Spring Boot
+- **Mode Socket** : Envoi des résultats via sockets pour scanning sur n'importe quelle IP
+- **Interface Web** : Visualisation des résultats dans un navigateur web
 
 ## Prérequis
 
@@ -72,6 +74,30 @@ python scanner.py 192.168.1.10 --save-local
 ```bash
 python scanner.py 192.168.1.10 --no-api
 ```
+
+### Utilisation du mode Socket (nouveau)
+
+Pour utiliser le nouveau système basé sur sockets avec interface web:
+
+1. **Démarrer le serveur socket** (dans un terminal):
+
+```bash
+./run_socket_server.sh
+```
+
+2. **Exécuter un scan avec sortie socket** (dans un autre terminal):
+
+```bash
+./run_scanner_socket.sh 192.168.1.10
+```
+
+3. **Visualiser les résultats** dans votre navigateur:
+
+```
+http://localhost:8000
+```
+
+Voir [SOCKET_USAGE.md](SOCKET_USAGE.md) pour plus de détails sur le mode socket.
 
 ## Format des résultats
 

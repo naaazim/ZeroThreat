@@ -37,3 +37,7 @@ class Config:
     # Output Configuration
     RESULTS_DIR = os.getenv('RESULTS_DIR', 'results')
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    
+    # Socket Server Configuration
+    SOCKET_SERVER_HOST = os.getenv('SOCKET_SERVER_HOST', 'localhost')
+    SOCKET_SERVER_PORT = int(os.getenv('SOCKET_SERVER_PORT', 5000))

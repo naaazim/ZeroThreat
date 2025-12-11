@@ -8,6 +8,7 @@ import subprocess
 import json
 import re
 import requests
+import socket
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
@@ -390,6 +391,56 @@ class VulnerabilityScanner:
         
         logger.info(f"Results saved to {output_path}")
 
+    def send_via_socket(self, results: Dict) -> bool:
+        """
+        Send scan results via socket to the socket server
+
+        Args:
+            results: Scan results dictionary
+
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.info(f"Sending results via socket to {Config.SOCKET_SERVER_HOST}:{Config.SOCKET_SERVER_PORT}")
+
+        try:
+            # Add scan_id to results if not present
+            if 'scan_id' not in results:
+                results['scan_id'] = f"scan_{self.target_ip}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            # Create socket connection
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(10)  # 10 second timeout
+                s.connect((Config.SOCKET_SERVER_HOST, Config.SOCKET_SERVER_PORT))
+
+                # Send JSON data
+                json_data = json.dumps(results)
+                s.sendall(json_data.encode('utf-8'))
+
+                # Receive response
+                response = s.recv(4096).decode('utf-8')
+                response_data = json.loads(response)
+
+                if response_data.get('status') == 'success':
+                    logger.info(f"Results sent via socket successfully. Scan ID: {response_data.get('scan_id')}")
+                    return True
+                else:
+                    logger.error(f"Socket server error: {response_data.get('message', 'Unknown error')}")
+                    return False
+
+        except socket.timeout:
+            logger.error(f"Socket connection timed out after 10 seconds")
+            return False
+        except ConnectionRefusedError:
+            logger.error(f"Connection refused. Is the socket server running on {Config.SOCKET_SERVER_HOST}:{Config.SOCKET_SERVER_PORT}?")
+            return False
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse socket server response: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to send results via socket: {str(e)}")
+            return False
+
 
 def main():
     """Main entry point for the scanner"""
@@ -400,6 +451,7 @@ def main():
     parser.add_argument('--url', help='Optional URL for web scanning (defaults to target)', default=None)
     parser.add_argument('--no-api', action='store_true', help='Skip sending results to API')
     parser.add_argument('--save-local', action='store_true', help='Save results locally')
+    parser.add_argument('--use-socket', action='store_true', help='Send results via socket instead of API')
     
     args = parser.parse_args()
     
@@ -424,11 +476,13 @@ def main():
     if args.save_local:
         scanner.save_results_locally(results)
     
-    # Send to API unless disabled
-    if not args.no_api:
+    # Send results based on selected method
+    if args.use_socket:
+        scanner.send_via_socket(results)
+    elif not args.no_api:
         scanner.send_to_api(results)
     else:
-        logger.info("Skipping API submission (--no-api flag set)")
+        logger.info("Skipping result submission (--no-api flag set and --use-socket not set)")
 
 
 if __name__ == "__main__":
