@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 import logging
 from pathlib import Path
 import sys
+import time
 from urllib.parse import urlparse, urlunparse
 
 # Configuration
@@ -50,7 +51,8 @@ class VulnerabilityScanner:
             "timestamp": self.timestamp,
             "nmap": [],
             "sqlmap": [],
-            "nikto": []
+            "nikto": [],
+            "cves": []
         }
 
     @staticmethod

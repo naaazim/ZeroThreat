@@ -103,12 +103,40 @@ function ScanDetails() {
     };
 
     const vulnChartData = {
-        labels: ['SQL', 'Web'],
+        labels: ['SQL', 'Web', 'CVEs'],
         datasets: [
             {
                 label: 'Vulnérabilités',
-                data: [scan.sqlMapResults?.length || 0, scan.niktoResults?.length || 0],
-                backgroundColor: [alpha(theme.palette.error.main, 0.8), alpha(theme.palette.warning.main, 0.8)],
+                data: [scan.sqlMapResults?.length || 0, scan.niktoResults?.length || 0, scan.cveResults?.length || 0],
+                backgroundColor: [
+                    alpha(theme.palette.error.main, 0.8),
+                    alpha(theme.palette.warning.main, 0.8),
+                    alpha(theme.palette.info.main, 0.8)
+                ],
+                borderWidth: 0,
+            },
+        ],
+    };
+
+    // CVE Severity Distribution
+    const cveSeverities = scan.cveResults?.reduce((acc, cve) => {
+        const severity = cve.cvssV3Severity || 'UNKNOWN';
+        acc[severity] = (acc[severity] || 0) + 1;
+        return acc;
+    }, {}) || {};
+
+    const cveChartData = {
+        labels: Object.keys(cveSeverities),
+        datasets: [
+            {
+                data: Object.values(cveSeverities),
+                backgroundColor: [
+                    alpha(theme.palette.error.dark, 0.9),  // CRITICAL
+                    alpha(theme.palette.error.main, 0.8),   // HIGH
+                    alpha(theme.palette.warning.main, 0.8), // MEDIUM
+                    alpha(theme.palette.success.main, 0.8),  // LOW
+                    alpha(theme.palette.grey[500], 0.5),     // UNKNOWN
+                ],
                 borderWidth: 0,
             },
         ],
@@ -246,7 +274,7 @@ function ScanDetails() {
 
             <Container maxWidth="xl" sx={{ py: 4 }}>
                 <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid item xs={12} md={4} className="animate-scale-in stagger-1">
+                    <Grid item xs={12} md={3} className="animate-scale-in stagger-1">
                         <Card
                             className="hover-lift"
                             sx={{
@@ -277,7 +305,7 @@ function ScanDetails() {
                             </Box>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4} className="animate-scale-in stagger-2">
+                    <Grid item xs={12} md={3} className="animate-scale-in stagger-2">
                         <Card
                             className="hover-lift"
                             sx={{
@@ -308,7 +336,7 @@ function ScanDetails() {
                             </Box>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4} className="animate-scale-in stagger-3">
+                    <Grid item xs={12} md={3} className="animate-scale-in stagger-3">
                         <Card
                             className="hover-lift"
                             sx={{
@@ -339,10 +367,41 @@ function ScanDetails() {
                             </Box>
                         </Card>
                     </Grid>
+                    <Grid item xs={12} md={3} className="animate-scale-in stagger-4">
+                        <Card
+                            className="hover-lift"
+                            sx={{
+                                p: 3,
+                                background: `linear-gradient(155deg, ${alpha(theme.palette.info.main, 0.16)}, ${alpha(
+                                    theme.palette.background.paper,
+                                    0.92
+                                )})`,
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box>
+                                    <Typography variant="h3" sx={{ fontWeight: 700 }}>
+                                        {scan.cveResults?.length || 0}
+                                    </Typography>
+                                    <Typography color="text.secondary">CVEs Détectées</Typography>
+                                </Box>
+                                <Box
+                                    sx={{
+                                        p: 1.5,
+                                        borderRadius: 2,
+                                        bgcolor: alpha(theme.palette.info.main, 0.22),
+                                        color: theme.palette.info.main,
+                                    }}
+                                >
+                                    <Security />
+                                </Box>
+                            </Box>
+                        </Card>
+                    </Grid>
                 </Grid>
 
                 <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={4}>
                         <Card>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
@@ -360,7 +419,7 @@ function ScanDetails() {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={4}>
                         <Card>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
@@ -368,6 +427,24 @@ function ScanDetails() {
                                 </Typography>
                                 <Box sx={{ height: 300 }}>
                                     <Bar data={vulnChartData} options={chartOptions} />
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                        <Card>
+                            <CardContent>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+                                    Sévérité des CVEs
+                                </Typography>
+                                <Box sx={{ height: 300 }}>
+                                    {scan.cveResults?.length > 0 ? (
+                                        <Pie data={cveChartData} options={{ ...chartOptions, plugins: { legend: { position: 'right' } } }} />
+                                    ) : (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                                            <Typography color="text.secondary">Aucune CVE détectée</Typography>
+                                        </Box>
+                                    )}
                                 </Box>
                             </CardContent>
                         </Card>
@@ -492,7 +569,89 @@ function ScanDetails() {
                                         </Table>
                                     </TableContainer>
                                 ) : (
-                                    <Typography color="text.secondary">Aucune vulnérabilité détectée</Typography>
+                                    <Typography color="text.secondary">Aucune vulnérabilité Web détectée</Typography>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                        <Card>
+                            <CardContent>
+                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
+                                    Résultats CVE (NVD)
+                                </Typography>
+                                <Divider sx={{ mb: 2 }} />
+                                {scan.cveResults?.length > 0 ? (
+                                    <TableContainer component={Paper} variant="outlined">
+                                        <Table>
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell>ID CVE</TableCell>
+                                                    <TableCell>Score CVSS</TableCell>
+                                                    <TableCell>Sévérité</TableCell>
+                                                    <TableCell>Description</TableCell>
+                                                    <TableCell>Actions</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {scan.cveResults.map((result) => (
+                                                    <TableRow key={result.id}>
+                                                        <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 'medium' }}>
+                                                            {result.cveId}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip
+                                                                label={result.cvssV3Score || 'N/A'}
+                                                                size="small"
+                                                                color={result.cvssV3Score >= 9.0 ? "error" : result.cvssV3Score >= 7.0 ? "error" : result.cvssV3Score >= 4.0 ? "warning" : "success"}
+                                                                variant={result.cvssV3Score ? "filled" : "outlined"}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip
+                                                                label={result.cvssV3Severity || 'UNKNOWN'}
+                                                                size="small"
+                                                                sx={{
+                                                                    bgcolor: result.cvssV3Severity === 'CRITICAL' ? alpha(theme.palette.error.dark, 0.9) :
+                                                                        result.cvssV3Severity === 'HIGH' ? alpha(theme.palette.error.main, 0.8) :
+                                                                            result.cvssV3Severity === 'MEDIUM' ? alpha(theme.palette.warning.main, 0.8) :
+                                                                                result.cvssV3Severity === 'LOW' ? alpha(theme.palette.success.main, 0.8) :
+                                                                                    alpha(theme.palette.grey[500], 0.5),
+                                                                    color: '#fff',
+                                                                    fontWeight: 'bold'
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell sx={{ maxWidth: 400 }}>
+                                                            <Typography variant="body2" sx={{
+                                                                display: '-webkit-box',
+                                                                overflow: 'hidden',
+                                                                WebkitBoxOrient: 'vertical',
+                                                                WebkitLineClamp: 2,
+                                                            }}>
+                                                                {result.description}
+                                                            </Typography>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip
+                                                                label="Détails NVD"
+                                                                component="a"
+                                                                href={`https://nvd.nist.gov/vuln/detail/${result.cveId}`}
+                                                                target="_blank"
+                                                                clickable
+                                                                size="small"
+                                                                color="primary"
+                                                                variant="outlined"
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                ) : (
+                                    <Typography color="text.secondary">Aucune CVE trouvée</Typography>
                                 )}
                             </CardContent>
                         </Card>

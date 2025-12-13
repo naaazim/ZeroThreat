@@ -14,8 +14,8 @@ import java.util.Set;
 @Entity
 @Table(name = "scans")
 @Data
-@EqualsAndHashCode(exclude = {"nmapResults", "sqlMapResults", "niktoResults", "user"})
-@ToString(exclude = {"nmapResults", "sqlMapResults", "niktoResults", "user"})
+@EqualsAndHashCode(exclude = { "nmapResults", "sqlMapResults", "niktoResults", "cveResults", "user" })
+@ToString(exclude = { "nmapResults", "sqlMapResults", "niktoResults", "cveResults", "user" })
 @NoArgsConstructor
 @AllArgsConstructor
 public class Scan {
@@ -46,29 +46,17 @@ public class Scan {
     // Use Set instead of List
     // -------------------------
 
-    @OneToMany(
-            mappedBy = "scan",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY
-    )
+    @OneToMany(mappedBy = "scan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<NmapResult> nmapResults = new HashSet<>();
 
-    @OneToMany(
-            mappedBy = "scan",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY
-    )
+    @OneToMany(mappedBy = "scan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<SqlMapResult> sqlMapResults = new HashSet<>();
 
-    @OneToMany(
-            mappedBy = "scan",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY
-    )
+    @OneToMany(mappedBy = "scan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<NiktoResult> niktoResults = new HashSet<>();
+
+    @OneToMany(mappedBy = "scan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<CveResult> cveResults = new HashSet<>();
 
     // -------------------------
     // Auto timestamps

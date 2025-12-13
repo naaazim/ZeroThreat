@@ -20,6 +20,7 @@ public class ScanResponseDTO {
     private List<NmapResultDTO> nmapResults;
     private List<SqlMapResultDTO> sqlMapResults;
     private List<NiktoResultDTO> niktoResults;
+    private List<CveResultDTO> cveResults;
     private ScanSummaryDTO summary;
 
     @Data
@@ -59,9 +60,24 @@ public class ScanResponseDTO {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    public static class CveResultDTO {
+        private Long id;
+        private String cveId;
+        private String description;
+        private Double cvssV3Score;
+        private String cvssV3Severity;
+        private LocalDateTime publishedDate;
+        private LocalDateTime lastModifiedDate;
+        private String references;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ScanSummaryDTO {
         private Integer totalOpenPorts;
         private Integer sqlVulnerabilities;
         private Integer webVulnerabilities;
+        private Integer totalCves;
     }
 }

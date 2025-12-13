@@ -18,7 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
         // Forward any path whose first segment is not /api and does not contain a file extension
         registry.addViewController("/{path:^(?!api$)[^\\.]*}")
                 .setViewName("forward:/index.html");
-        registry.addViewController("/{path:^(?!api$)[^\\.]*}/**/{rest:[^\\.]*}")
+        registry.addViewController("/{path:^(?!api$)[^\\.]*}/**")
                 .setViewName("forward:/index.html");
     }
 }

@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +28,9 @@ public class ScanService {
 
     @Autowired
     private ScanRepository scanRepository;
+
+    @Autowired
+    private CveService cveService;
 
     @Transactional
     public Scan createScanFromRequest(ScanRequestDTO request) {
@@ -97,7 +101,82 @@ public class ScanService {
             scan.setNiktoResults(niktoResults);
         }
 
-        return scanRepository.save(scan);
+        // Save scan first to generate ID
+        Scan savedScan = scanRepository.save(scan);
+
+        // ---------------------------
+        // CVE RESULTS
+        // ---------------------------
+        if (savedScan.getNmapResults() != null && !savedScan.getNmapResults().isEmpty()) {
+            Set<CveResult> cveResults = new HashSet<>();
+
+            for (NmapResult nmapResult : savedScan.getNmapResults()) {
+                // Only search for CVEs if version info is available
+                if (nmapResult.getVersion() != null && !nmapResult.getVersion().isBlank()) {
+                    String product = extractProductName(nmapResult.getService(), nmapResult.getVersion());
+                    String version = extractVersionNumber(nmapResult.getVersion());
+
+                    // Search CVEs for this product/version
+                    List<CveService.CveData> cveDataList = cveService.searchCvesByKeyword(product, version);
+
+                    // Convert to CveResult entities
+                    for (CveService.CveData cveData : cveDataList) {
+                        CveResult cveResult = new CveResult();
+                        cveResult.setScan(savedScan);
+                        cveResult.setNmapResult(nmapResult);
+                        cveResult.setCveId(cveData.getCveId());
+                        cveResult.setDescription(cveData.getDescription());
+                        cveResult.setCvssV3Score(cveData.getCvssV3Score());
+                        cveResult.setCvssV3Severity(cveData.getCvssV3Severity());
+                        cveResult.setPublishedDate(cveData.getPublishedDate());
+                        cveResult.setLastModifiedDate(cveData.getLastModifiedDate());
+                        cveResult.setReferences(cveData.getReferences());
+                        cveResults.add(cveResult);
+                    }
+                }
+            }
+
+            savedScan.setCveResults(cveResults);
+        }
+
+        return scanRepository.save(savedScan);
+    }
+
+    /**
+     * Extract product name from service and version string
+     */
+    private String extractProductName(String service, String version) {
+        if (version == null || version.isBlank()) {
+            return service != null ? service : "unknown";
+        }
+
+        // Try to extract product name from version string
+        // Common format: "ProductName Version"
+        String[] parts = version.trim().split("\\s+");
+        if (parts.length > 0 && !parts[0].matches("\\d+.*")) {
+            return parts[0];
+        }
+
+        return service != null ? service : "unknown";
+    }
+
+    /**
+     * Extract version number from version string
+     */
+    private String extractVersionNumber(String version) {
+        if (version == null || version.isBlank()) {
+            return "";
+        }
+
+        // Try to find version number pattern (e.g., "2.4.52", "1.0", etc.)
+        String[] parts = version.trim().split("\\s+");
+        for (String part : parts) {
+            if (part.matches("\\d+(\\.\\d+)*")) {
+                return part;
+            }
+        }
+
+        return version;
     }
 
     public Page<ScanResponseDTO> getAllScans(int page, int size) {
@@ -105,9 +184,14 @@ public class ScanService {
 
         // Initialize collections (avoid lazy errors)
         allScans.forEach(scan -> {
-            if (scan.getNmapResults() != null) scan.getNmapResults().size();
-            if (scan.getSqlMapResults() != null) scan.getSqlMapResults().size();
-            if (scan.getNiktoResults() != null) scan.getNiktoResults().size();
+            if (scan.getNmapResults() != null)
+                scan.getNmapResults().size();
+            if (scan.getSqlMapResults() != null)
+                scan.getSqlMapResults().size();
+            if (scan.getNiktoResults() != null)
+                scan.getNiktoResults().size();
+            if (scan.getCveResults() != null)
+                scan.getCveResults().size();
         });
 
         int start = Math.min(page * size, allScans.size());
@@ -140,6 +224,7 @@ public class ScanService {
         summary.setTotalOpenPorts(scan.getNmapResults() != null ? scan.getNmapResults().size() : 0);
         summary.setSqlVulnerabilities(scan.getSqlMapResults() != null ? scan.getSqlMapResults().size() : 0);
         summary.setWebVulnerabilities(scan.getNiktoResults() != null ? scan.getNiktoResults().size() : 0);
+        summary.setTotalCves(scan.getCveResults() != null ? scan.getCveResults().size() : 0);
         dto.setSummary(summary);
 
         return dto;
@@ -161,6 +246,13 @@ public class ScanService {
         dto.setNiktoResults(scan.getNiktoResults().stream()
                 .map(r -> new ScanResponseDTO.NiktoResultDTO(
                         r.getId(), r.getOsvdbId(), r.getMethod(), r.getUri(), r.getDescription()))
+                .collect(Collectors.toList()));
+
+        dto.setCveResults(scan.getCveResults().stream()
+                .map(r -> new ScanResponseDTO.CveResultDTO(
+                        r.getId(), r.getCveId(), r.getDescription(), r.getCvssV3Score(),
+                        r.getCvssV3Severity(), r.getPublishedDate(), r.getLastModifiedDate(),
+                        r.getReferences()))
                 .collect(Collectors.toList()));
 
         return dto;
@@ -203,8 +295,7 @@ public class ScanService {
                 ProcessBuilder pb = new ProcessBuilder(
                         pythonCmd,
                         scannerScript.getAbsolutePath(),
-                        nmapTarget
-                );
+                        nmapTarget);
 
                 if (targetUrl != null && !targetUrl.isBlank()) {
                     pb.command().add("--url");
@@ -217,8 +308,10 @@ public class ScanService {
                 java.util.Map<String, String> env = pb.environment();
                 String pythonPath = "/Users/nazim/Library/Python/3.9/lib/python/site-packages";
                 String existingPath = env.get("PYTHONPATH");
-                if (existingPath != null) env.put("PYTHONPATH", pythonPath + ":" + existingPath);
-                else env.put("PYTHONPATH", pythonPath);
+                if (existingPath != null)
+                    env.put("PYTHONPATH", pythonPath + ":" + existingPath);
+                else
+                    env.put("PYTHONPATH", pythonPath);
 
                 pb.redirectErrorStream(true);
 
@@ -242,10 +335,12 @@ public class ScanService {
     }
 
     private String normalizeTarget(String target) {
-        if (target == null) return null;
+        if (target == null)
+            return null;
 
         String trimmed = target.trim();
-        if (trimmed.isEmpty()) return null;
+        if (trimmed.isEmpty())
+            return null;
 
         try {
             URI uri = trimmed.contains("://") ? new URI(trimmed) : new URI("http://" + trimmed);
@@ -259,10 +354,12 @@ public class ScanService {
     }
 
     private String buildTargetUrl(String target) {
-        if (target == null) return null;
+        if (target == null)
+            return null;
 
         String trimmed = target.trim();
-        if (trimmed.isEmpty()) return null;
+        if (trimmed.isEmpty())
+            return null;
 
         if (!trimmed.contains("://")) {
             return "http://" + trimmed;
@@ -299,7 +396,7 @@ public class ScanService {
                 ? userDir.getParent()
                 : userDir;
 
-        Path[] candidates = new Path[]{
+        Path[] candidates = new Path[] {
                 repoRoot.resolve("scanner/scanner.py"),
                 userDir.resolve("scanner/scanner.py"),
                 repoRoot.getParent() != null ? repoRoot.getParent().resolve("scanner/scanner.py") : null
